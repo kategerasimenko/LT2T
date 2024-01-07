@@ -32,13 +32,20 @@ BATCH_SIZE = 16
 
 MODELS = {
     'tapas': {
-        'model': TapasForSequenceClassification.from_pretrained('google/tapas-large-finetuned-tabfact').to(DEVICE),
-        'tokenizer': TapasTokenizer.from_pretrained('google/tapas-large-finetuned-tabfact'),
+        'model_name': 'google/tapas-large-finetuned-tabfact',
+        'model_class': TapasForSequenceClassification,
+        'tokenizer_class': TapasTokenizer,
+        # 'model': TapasForSequenceClassification.from_pretrained().to(DEVICE),
+        # 'tokenizer': TapasTokenizer.from_pretrained('google/tapas-large-finetuned-tabfact'),
         'max_length': 512
     },
     'tapex': {
-        'model': BartForSequenceClassification.from_pretrained('microsoft/tapex-large-finetuned-tabfact').to(DEVICE),
-        'tokenizer': TapexTokenizer.from_pretrained('microsoft/tapex-large-finetuned-tabfact', add_prefix_space=True),
+        'model_name': 'microsoft/tapex-large-finetuned-tabfact',
+        'model_class': BartForSequenceClassification,
+        'tokenizer_class': TapexTokenizer,
+        'tokenizer_params': {'add_prefix_space': True},
+        # 'model': BartForSequenceClassification.from_pretrained('microsoft/tapex-large-finetuned-tabfact').to(DEVICE),
+        # 'tokenizer': TapexTokenizer.from_pretrained('microsoft/tapex-large-finetuned-tabfact', add_prefix_space=True),
         'max_length': 1024
     }
 }
@@ -71,8 +78,13 @@ def process_dataset(model_name, dataset, tokenizer):
 def predict(model_name, dataset):
     set_seed(SEED)
 
-    model = MODELS[model_name]['model']
-    tokenizer = MODELS[model_name]['tokenizer']
+    model_config = MODELS[model_name]
+    model = model_config['model_class'].from_pretrained(
+        model_config['model_name'], **model_config.get('model_params', {})
+    ).to(DEVICE)
+    tokenizer = model_config['tokenizer_class'].from_pretrained(
+        model_config['model_name'], **model_config.get('tokenizer_params', {})
+    )
     collator = DataCollatorWithPadding(tokenizer)
 
     proc_dataset = process_dataset(model_name, dataset, tokenizer)
