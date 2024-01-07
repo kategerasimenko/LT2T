@@ -1,4 +1,5 @@
 import re
+import datetime
 
 from pytimeparse import parse as timeparser_parse_time
 from dateparser import parse as dateparser_parse_date
@@ -10,6 +11,11 @@ from input_processing.detect_column_types import detect_column_types_in_header
 EMPTY = re.compile(r'^\s*(|-|n\s*[\\/]\s*a)\s*$')
 NUM_INSIDE_STR_REGEX = re.compile(r'\b\d+(?:\s*,\s*\d{3})*(?:\.\d+)?\b')
 TOTAL_REGEX = re.compile(r'\b((o ?v ?e ?r ?)?a ?l ?l|t ?o ?t ?a ?l( ?s)?|s ?u ?m)\b')
+
+REPRODUCIBLE_DATES = {
+    'logic2text': datetime.datetime(2023, 7, 30),
+    'logicnlg':  datetime.datetime(2023, 8, 16)
+}
 
 
 def create_combined_values_and_rm_empty(table):
@@ -39,12 +45,20 @@ def parse_numbers(num_str):
 
 
 def parse_date(date_str):
+    rel_base = REPRODUCIBLE_DATES['logicnlg']  # todo: hardcoded
     parsed_date = dateparser_parse_date(
         date_str,
-        settings={'PARSERS': ['absolute-time'], 'REQUIRE_PARTS': ['month']}
+        settings={
+            'PARSERS': ['absolute-time'],
+            'REQUIRE_PARTS': ['month'],
+            'RELATIVE_BASE': rel_base
+        }
     )
     if parsed_date is None:  # date MUST be there, checked on prevous step
-        parsed_date = dateparser_search_dates(date_str)[0][1]
+        parsed_date = dateparser_search_dates(
+            date_str,
+            settings={'RELATIVE_BASE': rel_base}
+        )[0][1]
     return parsed_date
 
 
