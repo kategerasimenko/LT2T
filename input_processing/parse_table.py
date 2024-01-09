@@ -1,4 +1,5 @@
 import re
+import datetime
 
 from pytimeparse import parse as timeparser_parse_time
 from dateparser import parse as dateparser_parse_date
@@ -10,6 +11,11 @@ from input_processing.detect_column_types import detect_column_types_in_header
 EMPTY = re.compile(r'^\s*(|-|n\s*[\\/]\s*a)\s*$')
 NUM_INSIDE_STR_REGEX = re.compile(r'\b\d+(?:\s*,\s*\d{3})*(?:\.\d+)?\b')
 TOTAL_REGEX = re.compile(r'\b((o ?v ?e ?r ?)?a ?l ?l|t ?o ?t ?a ?l( ?s)?|s ?u ?m)\b')
+
+REPRODUCIBLE_DATES = {
+    'logic2text': datetime.datetime(2023, 7, 30),
+    'logicnlg':  datetime.datetime(2023, 8, 16)
+}
 
 
 def create_combined_values_and_rm_empty(table):
@@ -26,29 +32,37 @@ def create_combined_values_and_rm_empty(table):
     return table
 
 
-def parse_number(num_str):
+def parse_number(num_str, **kwargs):
     num_str = num_str.strip(' %').replace(',', '').replace(' ', '')
     if '.' in num_str:
         return float(num_str)
     return int(num_str)
 
 
-def parse_numbers(num_str):
+def parse_numbers(num_str, **kwargs):
     nums = NUM_INSIDE_STR_REGEX.findall(num_str)
     return tuple(parse_number(num) for num in nums)
 
 
-def parse_date(date_str):
+def parse_date(date_str, dataset, **kwargs):
+    rel_base = REPRODUCIBLE_DATES[dataset]
     parsed_date = dateparser_parse_date(
         date_str,
-        settings={'PARSERS': ['absolute-time'], 'REQUIRE_PARTS': ['month']}
+        settings={
+            'PARSERS': ['absolute-time'],
+            'REQUIRE_PARTS': ['month'],
+            'RELATIVE_BASE': rel_base
+        }
     )
     if parsed_date is None:  # date MUST be there, checked on prevous step
-        parsed_date = dateparser_search_dates(date_str)[0][1]
+        parsed_date = dateparser_search_dates(
+            date_str,
+            settings={'RELATIVE_BASE': rel_base}
+        )[0][1]
     return parsed_date
 
 
-def parse_time(time_str):
+def parse_time(time_str, **kwargs):
     parsed = timeparser_parse_time(time_str)
     if parsed is None:  # only seconds (checked with regex in coltype clf)
         parsed = float(time_str.strip())
@@ -76,7 +90,7 @@ def is_row_repeating_header(row, header):
     return all(cell.value['raw'] == header_cell for cell, header_cell in zip(row, header))
 
 
-def parse_table(table):
+def parse_table(table, dataset):
     table = create_combined_values_and_rm_empty(table)
     header = [c.value.lower().strip() for c in table.cells[0]]
     rows_to_remove = set()
@@ -103,7 +117,8 @@ def parse_table(table):
             continue
 
         for j, cell in enumerate(row):
-            if coltypes[j] in PARSE_FUNCS and cell.value['processed'] is not None:
-                table.cells[i][j].value['processed'] = PARSE_FUNCS[coltypes[j]](cell.value['raw'])
+            parse_func = PARSE_FUNCS.get(coltypes[j])
+            if parse_func is not None and cell.value['processed'] is not None:
+                table.cells[i][j].value['processed'] = parse_func(cell.value['raw'], dataset=dataset)
 
     return table, coltypes

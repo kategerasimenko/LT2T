@@ -1,0 +1,7 @@
+{
+  "num_beams": 3,
+  "temperature": 1.0,
+  "do_sample": false,
+  "top_k": 50,
+  "num_return_sequences": 1
+}

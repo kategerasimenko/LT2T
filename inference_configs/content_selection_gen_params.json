@@ -1,0 +1,9 @@
+{
+  "num_beams": 1,
+  "num_beam_groups": 1,
+  "temperature": 1.0,
+  "do_sample": true,
+  "top_k": 50,
+  "penalty_alpha": 0.0,
+  "num_return_sequences": 5
+}

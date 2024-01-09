@@ -26,7 +26,7 @@ SEED = 42
 
 
 def run_content_selection(parsed_tables, split, model, generation_params, batch_size, raw_preds_path):
-    with open(os.path.join(model, 'processing_params.json')) as f:
+    with open(os.path.join(ROOT_DIR, 'inference_configs', 'content_selection_processing_params.json')) as f:
         processing_params = json.load(f)
 
     os.makedirs(raw_preds_path, exist_ok=True)
@@ -39,7 +39,7 @@ def run_content_selection(parsed_tables, split, model, generation_params, batch_
     )
     preds, _ = run_inference(
         ds=content_selection_data[split],
-        model_path=os.path.join(model, 'model'),
+        model_path=model,
         data_part=split,
         batch_size=batch_size,
         generation_params=generation_params,
@@ -94,7 +94,7 @@ def run_lf_to_text(filled_templates, parsed_tables, model, generation_params, sp
     # at least in this setup (and at all for LogicNLG)
     preds, _ = run_inference(
         ds=data[split],
-        model_path=os.path.join(model, 'model'),
+        model_path=model,
         data_part=split,
         batch_size=batch_size,
         generation_params=generation_params,
@@ -228,19 +228,17 @@ def run_selection_and_evaluation(parsed_tables, predictions_dir, full_texts, sel
 @click.option("--dataset", required=True, type=str, help="Dataset to train on")
 @click.option("--part", required=True, type=str, help="Part for evaluadation (dev or test).")
 @click.option("--parsed-tables-path", type=str, help="Path to parsed tables")
-@click.option("--content-selection-model", required=True, type=str, help="Path to model for content selection.")
-@click.option("--content-selection-generation", required=True, type=str, help="Path to generation parameters for content selection.")
-@click.option("--lf-to-text-model", required=True, type=str, help="Path to model for lf2text.")
-@click.option("--lf-to-text-generation", required=True, type=str, help="Path to generation parameters for lf2text.")
+@click.option("--content-selection-model", default='kategaranina/lt2t_content_selection', type=str, help="Path or HF name for content selection model.")
+@click.option("--lf-to-text-model", default='kategaranina/lt2t_lf_to_text', type=str, help="Path or HF name for lf2text model.")
 @click.option("--batch-size", default=16, type=int, help="Batch size for model inference.")
 @click.option("--predictions-dir", default=None, type=str, help="Directory to write predictions into.")
+@click.option("--no-eval", is_flag=True, help="Whether not to run any evaluation.")
 @click.option("--eval-only", is_flag=True, help="Whether to do only evaluation on existing predictions.")
 @click.option("--selection", type=str, default='single', help="Sample selection per table: all, several, single, one.")
 def main(
         dataset, part, parsed_tables_path,
-        content_selection_model, content_selection_generation,
-        lf_to_text_model, lf_to_text_generation, batch_size,
-        predictions_dir, eval_only, selection
+        content_selection_model, lf_to_text_model, batch_size,
+        predictions_dir, no_eval, eval_only, selection
 ):
     set_seed(SEED)
 
@@ -258,11 +256,13 @@ def main(
         parsed_tables = parse_tables(dataset, splits=[part])
 
     if not eval_only:
-        with open(os.path.join(content_selection_model, content_selection_generation)) as f:
+        with open(os.path.join(ROOT_DIR, 'inference_configs', 'content_selection_gen_params.json')) as f:
             content_selection_generation_params = json.load(f)
 
-        with open(os.path.join(lf_to_text_model, lf_to_text_generation)) as f:
+        with open(os.path.join(ROOT_DIR, 'inference_configs', 'lf_to_text_gen_params.json')) as f:
             lf_to_text_generation_params = json.load(f)
+
+        print('Running content selection...')
 
         content_selection_outputs = run_content_selection(
             parsed_tables,
@@ -275,9 +275,13 @@ def main(
         with open(os.path.join(predictions_dir, 'content_selection.json'), 'w') as f:
             json.dump(content_selection_outputs, f, indent=2, ensure_ascii=False)
 
+        print('Running template filling...')
+
         filled_templates = run_template_filling(content_selection_outputs, parsed_tables)
         with open(os.path.join(predictions_dir, 'filled_templates.json'), 'w') as f:
             json.dump(filled_templates, f, indent=2, ensure_ascii=False)
+
+        print('Running LF-to-text...')
 
         full_texts = run_lf_to_text(
             filled_templates,
@@ -296,25 +300,28 @@ def main(
         with open(os.path.join(predictions_dir, 'e2e_full.json')) as f:
             full_texts = json.load(f)
 
-    full_stats = evaluate_pred_stats(full_texts, nested=True)
+    if not no_eval:
+        print('Running evaluation...')
 
-    scores = run_selection_and_evaluation(
-        parsed_tables=parsed_tables,
-        predictions_dir=predictions_dir,
-        full_texts=full_texts,
-        selection_mode=selection
-    )
+        full_stats = evaluate_pred_stats(full_texts, nested=True)
 
-    scores.update({
-        f'full_{k}': {'avg': v, 'std': 0}
-        for k, v in full_stats.items()
-    })
+        scores = run_selection_and_evaluation(
+            parsed_tables=parsed_tables,
+            predictions_dir=predictions_dir,
+            full_texts=full_texts,
+            selection_mode=selection
+        )
 
-    for score_name, score in scores.items():
-        print(score_name, round(score['avg'], 4), round(score['std'], 4))
+        scores.update({
+            f'full_{k}': {'avg': v, 'std': 0}
+            for k, v in full_stats.items()
+        })
 
-    with open(score_file, 'w') as f:
-        json.dump(scores, f, indent=2)
+        for score_name, score in scores.items():
+            print(score_name, round(score['avg'], 4), round(score['std'], 4))
+
+        with open(score_file, 'w') as f:
+            json.dump(scores, f, indent=2)
 
 
 if __name__ == '__main__':

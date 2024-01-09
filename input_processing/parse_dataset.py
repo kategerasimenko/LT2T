@@ -45,7 +45,7 @@ def parse_tables(dataset_name, splits=None):
 
             if table_id not in parsed_tables:
                 try:
-                    table, coltypes = parse_table(table_obj)
+                    table, coltypes = parse_table(table_obj, dataset=dataset_name)
                 except Exception as e:
                     print('\n', spl, i, e)
                     continue
