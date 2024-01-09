@@ -330,6 +330,7 @@ def train_seq2seq(
 
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(save_dir, "preds"), exist_ok=True)
+    os.makedirs(os.path.join(ROOT_DIR, 'scores'), exist_ok=True)
 
     if train_data is not None:
         print('TRAIN:')
@@ -360,7 +361,7 @@ def train_seq2seq(
 
     neptune_callback = NeptuneCallback(
         tags=[model_name],
-        project=f"kategaranina/{task}"
+        project=f"{os.environ['NEPTUNE_ORG']}/{task}"  # env var must be defined for Neptune anyway
     )
     neptune_callback.run['model'] = model_name
     neptune_callback.run['base_model'] = base_model
